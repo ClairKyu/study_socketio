@@ -1,6 +1,6 @@
 "use strict";
 import http from "http"; // http는 따로 설치 필요 없음, node.js에 이미 설치되어 있음
-import WebSocket from "ws";
+import { Server } from "socket.io";
 import express from "express";
 
 const app = express();
@@ -14,40 +14,36 @@ app.get("/*", (req,res)=>res.redirect("/")); //catchall, 다른 URL 사용 안�
 
 const handleListen = () => console.log('Listening on http://localhost:3000');
 
-const server = http.createServer(app); //express 으로 서버 생성, 웹소켓을 위해 꼭 필요함 (http 동작)
-const wss = new WebSocket.Server({server});//WebSocket 서버 생성 (ws 동작)
+const httpServer = http.createServer(app); //express 으로 서버 생성, 웹소켓을 위해 꼭 필요함 (http 동작)
+const wsServer = new Server(httpServer);
 
-function onSocketClose() {
-    console.log("Disconnected from Browser");//Browser에서 off하면 연결 끊어졌다는 문구 출력
-}
+wsServer.on("connection", (socket) =>{
+    wsServer.socketsJoin("공지알림방");
+    socket["nickname"] = "Anon";
+    socket.onAny((event)=>{
+        console.log(`Socket Event:${event}`);
+    });//이벤트 명칭 체크
 
-/*function onSocketMessage(message) {
-    const translatedMessageData = message.toString('utf8');//Browser로부터 온 메시지가 Buffer로 출력되는 문제 해결 
-    console.log(translatedMessageData);//Browser에서 온 메시지 출력
-}*/
-const sockets = [];
-
-wss.on("connection", (socket) => {
-    sockets.push(socket);//Browser에서 연결이 되면 연결 socket을 sockets 배열에 넣어줌
-    socket["nickname"] = "Anon"; //nickname 정하지 않은 사람에게 Anon이라는 닉네임 부여
-    console.log("Connected to Browser");
-    socket.on("close", onSocketClose);
-    socket.on("message", (msg) => {
-        const translatedmsg = msg.toString('utf8');//Browser로부터 온 메시지가 Buffer로 출력되는 문제 해결
-        const message = JSON.parse(translatedmsg);
-        console.log(message, translatedmsg);//parsed는 javascript object, translatedMessageData는 string
-        switch(message.type){
-            case "new_message":
-                sockets.forEach((aSocket) => 
-                    aSocket.send(`${socket.nickname}: ${message.payload}`)
-                    );//연결된 모든 소켓에 접근       
-            case "nickname":
-                socket["nickname"] = message.payload;//socket안에 데이터를 저장할 수 있음
-        }
+    socket.on("enter_room", (roomName, done) => {
+        console.log(socket.id);//socket id 확인
+        socket.join(roomName);//방에 입장하는 명령어
+        console.log(socket.rooms);//방 목록 확인
+        done("hello from the backend");//방에 참가하면 done function 호출
+        socket.to(roomName).emit("welcome",socket.nickname);//모든 사람에게 emit
     });
-});
 
-server.listen(3000, handleListen);
+    socket.on("disconnecting",()=>{
+        socket.rooms.forEach(room => socket.to(room).emit("bye", socket.nickname));
+    });//disconnecting 기능이 있음(서버 끊기기 전에 메시지 전송 가능)
+
+    socket.on("new_message", (msg, room, done) => {
+        socket.to(room).emit("new_message", `${socket.nickname}: ${msg}`);
+        done();
+    });
+    socket.on("nickname", (nickname) => socket["nickname"] = nickname);
+});//서버측 소켓 연결과정  
+
+httpServer.listen(3000, handleListen);
 
 {
     type: "message"
