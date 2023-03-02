@@ -52,12 +52,29 @@ function handleRoomSubmit(event){
 
 form.addEventListener("submit", handleRoomSubmit);
 
-socket.on("welcome", (user)=>{
+socket.on("welcome", (user, newCount)=>{
+    const h3 = room.querySelector("h3");
+    h3.innerText = `Room ${roomName} (${newCount})`;
     addMessage(`${user} joined!`);
 })
 
-socket.on("bye", (left)=>{
+socket.on("bye", (left, newCount)=>{
+    const h3 = room.querySelector("h3");
+    h3.innerText = `Room ${roomName} (${newCount})`;
     addMessage(`${left} left!`)
 })
 
 socket.on("new_message", addMessage);
+
+socket.on("room_change", (rooms) => {
+    const roomList = welcome.querySelector("ul");
+    roomList.innerHTML = "";//room 목록 업뎃될때마다 비워주기
+    if(rooms.length === 0){
+        return;
+    }//room이 비었을 때 room 정보 반환
+    rooms.forEach(room => {
+        const li = document.createElement("li");
+        li.innerText = room;
+        roomList.append(li);
+    });
+});//room change 발생 시 room 배열 제공
